@@ -1,0 +1,171 @@
+# Item 0 - Sobre Agilidade e Planejamento
+# https://arthurferreira.notion.site/73f625421dec4926b553d79bf1892ab5?v=07d00879699849e8aebed1f9011d89d6&pvs=4
+
+# Item 1 - Sobre a Base de Dados,
+# Base de dados: E-Commerce Sales Dataset, retirada do Kaggle
+# https://www.kaggle.com/datasets/thedevastator/unlock-profits-with-e-commerce-sales-data?resource=download
+
+# Item  2.1 - Sobre a Dadosfera - Integrar
+# Foram exportados para a Dadosfera 3 bases, mas apenas o Amazon Sale Report vai ser utilizado. Ele tem 120378 linhas.
+# Link na Dadosfera: https://app.dadosfera.ai/pt-BR/catalog/data-assets/d8e03ff1-856e-4ef5-95f6-242d01243581
+# Está identificado como "Raw" simulando a ingestão de dados raws na plataforma, que posteriormente seriam transformados.
+
+# Item  3 - Sobre a Dadosfera - Explorar
+# Os dados foram ingeridos a partir do site Kaggle manualmente. Nesse arquivo estão no formato raw, para que possamos manter a estrutura original antes de fazermos a transformação.
+# Após a ingestão, eles devem ser direcionados para o Master Data, e, após isso, transformados em Curated Data, mas sem apagarmos o arquivo Raw, permitindo um repositório confiável para caso de mudança nas regras de negócio. Esses Curated Data serão utilizados em plataformas de visualização e análise, enquanto o Raw permanecerá armazenado.
+
+# Item 4 - Sobre Data Quality
+# Não entendi bem se devia inserir o código ou o resultado, então vou inserir o resultado, caso necessário posso enviar o código posteriormente:
+# Link do relatório: https://drive.google.com/file/d/1U9-d-jUi1aP5UljTFqiG4FiDcY8l_vEq/view
+
+# Item 5 - Sobre o uso de GenAI e LLMs - Processar
+# Utilizei o dataset sugerido do spacemanidol. Link: https://huggingface.co/datasets/spacemanidol/product-search-corpus
+# Ele foi analisado pela biblioteca Spacy, e o resultado foi um arquivo de 1k linhas (se fosse explorar tudo, acredito que ficaria quase 12 horas). O resultado foi subido na Dadosfera no seguinte link: https://app.dadosfera.ai/pt-BR/catalog/data-assets/4dbc3982-5705-403d-a607-757207ac2cb9
+# Por ser mais específico, posto abaixo o código
+                  
+                  import spacy
+                  import json
+                  import csv
+                  
+                  # Carregar o modelo spaCy
+                  nlp = spacy.load("en_core_web_sm")
+                  
+                  def extrair_features(texto):
+                      doc = nlp(texto.lower())
+                      features = {
+                          "material": None,
+                          "RFID_technique": "rfid" in texto,
+                          "handmade": "100% handmade" in texto.lower(),
+                          "card_slots": "card slots" in texto.lower(),
+                          "cosmetic_mirror": "cosmetic mirror" in texto.lower(),
+                          "kickstand_function": "kickstand function" in texto.lower(),
+                          "color_options": None,  # Será ajustado posteriormente
+                          "compatibility": None  # Será ajustado posteriormente
+                      }
+                  
+                      # Exemplos simplificados para determinar material, color_options e compatibility para o modelo ter um ponto de partida
+                      if "leather" in texto.lower():
+                          features["material"] = "Leather"
+                      elif "cotton" in texto.lower():
+                          features["material"] = "Cotton"
+                  
+                      if "color black" in texto.lower():
+                          features["color_options"] = "Black"
+                      if "samsung galaxy s8 plus" in texto.lower():
+                          features["compatibility"] = "Samsung Galaxy S8 Plus"
+                      
+                      return features
+                  
+                  def processar_dataset(arquivo_json, arquivo_saida_csv, max_linhas=1000): # Limitei porque o arquivo estava demorando muito para ser executado
+                      with open(arquivo_json, 'r', encoding='utf-8') as file, \
+                           open(arquivo_saida_csv, 'w', newline='', encoding='utf-8') as csv_file:
+                          fieldnames = ['docid', 'title', 'category', 'material', 'RFID_technique', 'handmade', 'card_slots', 'cosmetic_mirror', 'kickstand_function', 'color_options', 'compatibility']
+                          writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+                          writer.writeheader()
+                  
+                          contador_linhas = 0
+                          for linha in file:
+                              if contador_linhas >= max_linhas:
+                                  break
+                              produto = json.loads(linha)
+                              features_produto = extrair_features(produto["text"])
+                              features_produto["category"] = "Cell Phones & Accessories" if "cell phones & accessories" in produto["text"].lower() else "Clothing, Shoes & Jewelry"
+                              features_produto["title"] = produto["title"]
+                              features_produto["docid"] = produto["docid"]
+                              
+                              # Escreve as features no arquivo CSV
+                              writer.writerow(features_produto)
+                              contador_linhas += 1
+                  
+                  processar_dataset(r"D:\OneDrive\Trabalho\Dadosfera\corpus.json", r"D:\OneDrive\Trabalho\Dadosfera\output.csv", 1000)
+
+# Item 6 - Sobre Modelagem de Dado
+# Pressupondo que ambos os arquivos subidos na plataforma formam nossa base de dados, e que, hipoteticamente, eles tem como chave de comunicação o ASIN (no caso do Amazon Report) e o Docid (no caso do arquivo do spacemanidol), acredito que os príncipios da modelagem de Kimball são mais adaptaveis, por ser uma modelagem dimensional e por ser mais eficiente no caso de análises de BI. Poderiamos ter duas visões finais: Visão 1: Análise de Vendas por Produto e Tempo
+
+# Visão 1
+# Esta visão foca na análise de desempenho das vendas ao longo do tempo, detalhada por produto. Ela permitiria responder perguntas como "Quais produtos tiveram mais vendas em um determinado período?" ou "Como as vendas de um produto específico variam ao longo do ano?"
+# Campos: Data, Categoria de Produto, Tamanho, Estilo, Quantidade Vendida, Valor Total de Vendas.
+                    
+# Visão 2: Análise de Características do Produto e Desempenho de Vendas
+# Focada nas características dos produtos e como elas influenciam o desempenho das vendas. Seria útil para entender se certas características (como material, feito à mão, etc.) afetam as vendas.
+# Campos: Categoria de Produto, Material, Feito à Mão, Slots para Cartão, Espelho Cosmético, Função de Suporte, Opções de Cores, Quantidade Vendida, Valor Total de Vendas. 
+
+# Porém serei sincero, entendo pouco de modelos de modelagem, preciso aprimorar meu conhecimento sobre isso.
+
+# Item  7 - Sobre Análise de Dados - Analisar
+# Segue o link do dash construído na plataforma: https://metabase-treinamentos.dadosfera.ai/dashboard/88-dash-do-case
+
+# As querys são essas:
+# SELECT "PUBLIC"."PRODUCTS"."CATEGORY" AS "CATEGORY", COUNT(*) AS "count"
+# FROM "PUBLIC"."PRODUCTS"
+# GROUP BY "PUBLIC"."PRODUCTS"."CATEGORY"
+# ORDER BY "PUBLIC"."PRODUCTS"."CATEGORY" ASC
+
+
+# SELECT DATE_TRUNC('month', "PUBLIC"."PRODUCTS"."CREATED_AT") AS "CREATED_AT", COUNT(*) AS "count"
+# FROM "PUBLIC"."PRODUCTS"
+# GROUP BY DATE_TRUNC('month', "PUBLIC"."PRODUCTS"."CREATED_AT")
+# ORDER BY DATE_TRUNC('month', "PUBLIC"."PRODUCTS"."CREATED_AT") ASC
+
+# Acho que não é possível colar um print aqui, então enviei o link do dash acima
+# Também criei um Power BI simples. Segue o link do Power BI na Dadosfera: https://app.dadosfera.ai/pt-BR/catalog/data-assets/187c9176-e8cf-4532-bc0f-fd1241e13eb2
+
+# Item  8 - Sobre Pipelines
+# O link da Stepsfera no Github não está funcionando, e os dados processados anteriormente também não poderiam ser processados por pipeline. Então eu não soube bem o que fazer aqui, mas eu coloco aqui uma pipeline que criei semana passada para simular essa etapa do projeto.
+
+              import requests
+              import json
+              
+              # Monthly card importation
+              def updated_monthly():
+                
+              url = ....
+              
+              bearer = ....
+              
+              pipeId = ....
+                       
+              headers = {
+                  'Content-Type': 'application/json',
+                  'Authorization': ....
+                  'Cookie': ...
+                }
+              
+              # In this query, use the $after for go to next cursor (pagination).
+              query = """
+                query Myquery ($after: String) {
+                  allCards(pipeId: $pipeId, after: $after) {
+                   ... }
+                """
+              
+                # Cursor variable
+                variables = {"after": None}
+              
+                # Result of API
+                out = []
+              
+                # Next page check and condition
+                has_next_page = True
+              
+                while has_next_page:
+                  response = requests.post(url, json={'query': query, 'variables': variables}, headers=headers)
+                  json_data = response.json()
+                  if 'errors' in json_data:
+                    print(json_data['errors'])
+                    break
+                  pageInfo = json_data['data']['allCards']['pageInfo']
+                  edges = json_data['data']['allCards']['edges']
+                      
+                  out.extend(edges) 
+                  
+                  # If has next page, save the endCursor in after, to begin after that
+                  has_next_page = pageInfo['hasNextPage']
+                  variables['after'] = pageInfo['endCursor'] 
+
+
+# Item  9 - Sobre Data Apps                           
+# Eu não tenho acesso à plataforma necessária para realizar essa fase.
+
+# Item  10 - Apresentação do case
+# Segue o link do ptt (quando eu subi para o Drive, as fontes foram modificadas): https://docs.google.com/presentation/d/13Jw0LaDBPeiCMyze69NF7FWjS3lH5nvw/edit?usp=sharing&ouid=113155780216715497538&rtpof=true&sd=true
+# Segue o link do vídeo: https://youtu.be/wJhzpIMMbDU
